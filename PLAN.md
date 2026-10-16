@@ -18,7 +18,7 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 | UI | SwiftUI, single target, no third-party deps besides whisper.cpp |
 | whisper.cpp | Prebuilt **v1.9.2** XCFramework, vendored at `Packages/WhisperFramework/whisper.xcframework` and wired up with a local SwiftPM `binaryTarget` path, so a clone builds offline. v1.9.3–v1.9.5 ship no XCFramework. |
 | Model | `ggml-large-v3-turbo-q5_0.bin` (~550 MB), downloaded from Hugging Face on first launch into Documents, excluded from backup, loaded **once** |
-| Acceleration | Metal on (default). Core ML off for v1. Revisit only if transcription is slow. |
+| Acceleration | Metal on device (default), CPU in the simulator (its Metal driver cannot allocate the model buffer). Core ML off for v1. Revisit only if transcription is slow. |
 | Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor) |
 | Audio | `AVAudioRecorder` → 16 kHz mono 16-bit WAV, read back as Float via `AVAudioFile` |
 | Language | `language = "auto"` constant. Entries mix Spanish and English within one recording. |

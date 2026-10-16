@@ -9,7 +9,15 @@ actor Whisper {
     /// Blocking: takes a few seconds for large-v3-turbo. Call from a background task.
     init(modelPath: String) throws {
         var params = whisper_context_default_params()
+        // Metal on device. The simulator's Metal driver ships buffers to the host GPU
+        // over XPC, and the model's ~550 MB buffer trips an XPC shared-memory limit
+        // (MTLSimDevice newBufferWithLength: -> _xpc_api_misuse -> SIGTRAP), so use the
+        // CPU there. Slow, but it makes the simulator usable for smoke tests.
+        #if targetEnvironment(simulator)
+        params.use_gpu = false
+        #else
         params.use_gpu = true // Metal
+        #endif
         guard let ctx = whisper_init_from_file_with_params(modelPath, params) else {
             throw XiuxiuError("Couldn't load the Whisper model.")
         }
