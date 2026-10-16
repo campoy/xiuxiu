@@ -19,13 +19,13 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 | whisper.cpp | Prebuilt **v1.9.2** XCFramework, vendored at `Packages/WhisperFramework/whisper.xcframework` and wired up with a local SwiftPM `binaryTarget` path, so a clone builds offline. v1.9.3–v1.9.5 ship no XCFramework. |
 | Model | `ggml-large-v3-turbo-q5_0.bin` (~550 MB), downloaded from Hugging Face on first launch into Documents, excluded from backup, loaded **once** |
 | Acceleration | Metal on device (default), CPU in the simulator (its Metal driver cannot allocate the model buffer). Core ML off for v1. Revisit only if transcription is slow. |
-| Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor) |
+| Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor). Recording a new clip while earlier ones transcribe is allowed; the actor runs them one at a time. |
 | Audio | `AVAudioRecorder` → 16 kHz mono 16-bit WAV, read back as Float via `AVAudioFile` |
 | Language | `language = "auto"` constant. Entries mix Spanish and English within one recording. |
 | Prompt | Punctuated Spanish/English `initialPrompt` to encourage punctuation and code-switching |
 | Typical length | Under 5 minutes; foreground only (no background audio mode) |
 | Storage | SwiftData `Entry(date, text)`. Auto-save after transcription; edits auto-save. |
-| Audio retention | Delete the recording after a successful transcription |
+| Audio retention | Delete the recording after a successful transcription, by its own URL. Each recording gets a unique filename, so finishing one clip cannot delete another. |
 | Project file | XcodeGen (`project.yml`); the `.xcodeproj` is generated and gitignored |
 | Bundle ID | `cat.campoy.xiuxiu` |
 | Out of scope | Settings screens, abstractions, App Store, streaming |
@@ -91,6 +91,48 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
 - Need newer whisper.cpp → build an XCFramework with `./build-xcframework.sh` and replace the
   vendored `Packages/WhisperFramework/whisper.xcframework` with it.
 
+### 6. Record while transcribing
+
+Wanted after the simulator smoke test: tapping record again while an earlier clip is still
+being transcribed, instead of waiting for it to finish.
+
+- [x] Give every recording its own file. This was the real blocker, not the disabled button.
+      `Recorder` wrote every clip to one fixed `tmp/recording.wav`, so a second recording would
+      truncate the file the first was still being read from -- and worse, finishing the first
+      called `deleteRecording()` on that shared path, deleting the *second* clip's audio.
+      Recordings are now `recording-<uuid>.wav` and are deleted by URL.
+- [x] Split the state machine. `AppModel.State` conflated the model's lifecycle with what the
+      user was doing, and recording and transcribing are no longer mutually exclusive. `State`
+      now covers only downloading/loading/ready/failed; `isRecording` and `transcribingCount`
+      sit alongside it. The record button gates on `canRecord`, which asks only about the model.
+- [x] Keep transcription failures off the fatal path. A failed clip sets `lastError` and leaves
+      the model loaded, rather than putting the whole app in `.failed` and disabling recording.
+- [x] Builds clean, no new warnings.
+- [x] Show the outstanding clips as a stack, laid out like the History rows they are about to
+      become: a caption line (start time, elapsed, ticking once a second) over a progress bar.
+- [x] Real progress, not an estimate. whisper.cpp exposes `whisper_progress_callback`, so the bar
+      is driven by the measured figure. The callback is a C function pointer and cannot capture,
+      so the Swift closure travels through `progress_callback_user_data` (`ProgressBridge`).
+- [ ] Try it in the simulator: record, stop, and record again while the first is transcribing.
+      The CPU backend makes the window to do this comfortably wide.
+
+Two things worth knowing about the design:
+
+- **Transcriptions queue, they do not run in parallel.** `Whisper` is an actor around a single
+  `whisper_context`, which is not thread-safe, so overlapping calls serialise on it. That is the
+  intended behaviour: parallel transcription would mean a second ~550 MB context. `transcribingCount`
+  reports the backlog so the UI can say "Transcribing 2 clips…".
+- **The progress bar is granular, and the elapsed timer is the better signal for short clips.**
+  Whisper processes audio in 30 s windows and reports progress per window, so a clip under 30 s
+  effectively goes 0% then 100%. A 5-minute entry steps in roughly ten increments. Nothing is wrong
+  when a short clip's bar sits at zero -- that is the resolution of the measurement.
+- **Only the first job in the stack is running.** The others sit at 0% until the actor reaches them,
+  because a single `whisper_context` serialises them. The stack is a queue, shown honestly.
+- **The on-screen entry is replaced only when new text arrives**, not when recording starts.
+  Finished clips always land in SwiftData, so nothing is lost either way; this just avoids blanking
+  the screen for however long a transcription takes. If a result arrives while an earlier entry is
+  being edited, the editor does swap to the new one -- the edit is already saved, but the cursor moves.
+
 ## File map
 
 ```
@@ -98,10 +140,11 @@ AGENTS.md                       conventions for coding agents working in this re
 project.yml                     XcodeGen spec
 Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
 xiuxiu/Config.swift             language, initialPrompt, model URL
-xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:)
-xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording
+xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:)
+xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording, one file per clip
 xiuxiu/ModelDownloader.swift    URLSession download with progress, atomic move into Documents
-xiuxiu/AppModel.swift           state: downloading → loading → ready ⇄ recording → transcribing / failed
+xiuxiu/AppModel.swift           model state: downloading → loading → ready / failed,
+                                plus isRecording and transcribingCount alongside it
 xiuxiu/ContentView.swift        record button, EntryEditor (edit + copy), HistoryView
 xiuxiu/XiuxiuApp.swift          app entry + SwiftData Entry model
 ```

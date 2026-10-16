@@ -37,23 +37,62 @@ struct ContentView: View {
             }
         case .loading:
             ProgressView("Loading model…")
-        case .ready:
-            EmptyView()
-        case .recording:
-            Label("Recording…", systemImage: "waveform").foregroundStyle(.red)
-        case .transcribing:
-            ProgressView("Transcribing…")
         case .failed(let message):
             VStack {
                 Text(message).foregroundStyle(.red)
                 Button("Retry") { Task { await app.retry() } }
             }
+        case .ready:
+            // Recording and transcribing overlap, so this reports both rather than choosing.
+            VStack(spacing: 4) {
+                if app.isRecording {
+                    Label("Recording…", systemImage: "waveform").foregroundStyle(.red)
+                }
+                if !app.jobs.isEmpty { transcribingStack }
+                if let lastError = app.lastError {
+                    Text(lastError).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center)
+                }
+            }
         }
     }
 
+    /// Clips still being transcribed, shaped like the History rows they are about to become:
+    /// a caption line over the content. Only the first is actually running -- the Whisper actor
+    /// takes one at a time -- so the rest sit at 0% until their turn.
+    private var transcribingStack: some View {
+        // Re-renders once a second purely so the elapsed times tick.
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(spacing: 0) {
+                ForEach(app.jobs) { job in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(job.startedAt, format: .dateTime.hour().minute().second())
+                            Spacer()
+                            Text(Self.elapsed(from: job.startedAt, to: context.date)).monospacedDigit()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        ProgressView(value: job.progress)
+                    }
+                    .padding(.vertical, 8)
+                    if job.id != app.jobs.last?.id { Divider() }
+                }
+            }
+            .padding(.horizontal, 12)
+            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+        }
+    }
+
+    private static func elapsed(from: Date, to: Date) -> String {
+        let seconds = max(0, Int(to.timeIntervalSince(from)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
     private var recordButton: some View {
-        let recording = app.state == .recording
+        let recording = app.isRecording
         return Button {
+            // Each tap gets its own Task, so stopping one clip never blocks starting the next:
+            // the transcription runs on in the task that stopped it.
             Task {
                 if recording {
                     if let text = await app.stopAndTranscribe() {
@@ -62,7 +101,8 @@ struct ContentView: View {
                         entry = new
                     }
                 } else {
-                    entry = nil
+                    // The previous entry deliberately stays on screen while the next clip
+                    // records; it is replaced only once new text actually arrives.
                     await app.startRecording()
                 }
             }
@@ -73,8 +113,8 @@ struct ContentView: View {
                 .frame(width: 120, height: 120)
                 .background(Circle().fill(recording ? Color.red : Color.accentColor))
         }
-        .disabled(app.state != .ready && !recording)
-        .opacity(app.state != .ready && !recording ? 0.4 : 1)
+        .disabled(!app.canRecord)
+        .opacity(app.canRecord ? 1 : 0.4)
     }
 }
 

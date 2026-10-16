@@ -28,7 +28,10 @@ actor Whisper {
         whisper_free(ctx)
     }
 
-    func transcribe(fileAt url: URL) throws -> String {
+    /// `onProgress` receives 0...100 and is called on whisper's own thread, not the main one.
+    /// It is driven by whisper's progress callback, so the figure is measured, not estimated --
+    /// but it advances per 30 s window of audio, so a short clip jumps rather than creeps.
+    func transcribe(fileAt url: URL, onProgress: @escaping @Sendable (Int) -> Void = { _ in }) throws -> String {
         let samples = try readSamples(url)
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.n_threads = Int32(max(1, min(8, ProcessInfo.processInfo.activeProcessorCount - 2)))
@@ -39,12 +42,23 @@ actor Whisper {
         params.print_timestamps = false
         params.print_special = false
 
-        let status = language.withCString { lang in
-            initialPrompt.withCString { prompt in
-                params.language = lang
-                params.initial_prompt = prompt
-                return samples.withUnsafeBufferPointer { buf in
-                    whisper_full(ctx, params, buf.baseAddress, Int32(buf.count))
+        // A C function pointer cannot capture, so the closure travels through user_data.
+        // Unretained: `bridge` is kept alive for the whole call by withExtendedLifetime below.
+        let bridge = ProgressBridge(onProgress)
+        params.progress_callback = { _, _, progress, userData in
+            guard let userData else { return }
+            Unmanaged<ProgressBridge>.fromOpaque(userData).takeUnretainedValue().report(Int(progress))
+        }
+        params.progress_callback_user_data = Unmanaged.passUnretained(bridge).toOpaque()
+
+        let status = withExtendedLifetime(bridge) {
+            language.withCString { lang in
+                initialPrompt.withCString { prompt in
+                    params.language = lang
+                    params.initial_prompt = prompt
+                    return samples.withUnsafeBufferPointer { buf in
+                        whisper_full(ctx, params, buf.baseAddress, Int32(buf.count))
+                    }
                 }
             }
         }
@@ -68,6 +82,22 @@ actor Whisper {
         }
         try file.read(into: buffer)
         return Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+    }
+}
+
+/// Carries a Swift closure through whisper's `void *user_data`.
+private final class ProgressBridge: @unchecked Sendable {
+    private let onProgress: @Sendable (Int) -> Void
+    private var last = -1
+
+    init(_ onProgress: @escaping @Sendable (Int) -> Void) { self.onProgress = onProgress }
+
+    /// Whisper can report the same percentage repeatedly; only pass on actual changes,
+    /// so the UI is not woken for every no-op update.
+    func report(_ progress: Int) {
+        guard progress != last else { return }
+        last = progress
+        onProgress(progress)
     }
 }
 

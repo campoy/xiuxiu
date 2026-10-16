@@ -2,26 +2,41 @@ import SwiftUI
 
 @MainActor @Observable
 final class AppModel {
+    /// Only the model's lifecycle. Recording and transcribing are deliberately *not* in here:
+    /// they overlap, so a single state would have to pick one to represent and hide the other.
     enum State: Equatable {
         case downloading(Double)
         case loading
         case ready
-        case recording
-        case transcribing
         case failed(String)
     }
 
-    var state: State = .loading {
-        // Keep the screen awake while busy: auto-lock would stop a recording or a download.
-        didSet {
-            switch state {
-            case .ready, .failed: UIApplication.shared.isIdleTimerDisabled = false
-            default: UIApplication.shared.isIdleTimerDisabled = true
-            }
-        }
+    var state: State = .loading { didSet { updateIdleTimer() } }
+
+    /// One at a time: the mic is a single resource.
+    private(set) var isRecording = false { didSet { updateIdleTimer() } }
+
+    /// One clip waiting on, or inside, transcription.
+    struct TranscriptionJob: Identifiable, Equatable {
+        let id = UUID()
+        let startedAt: Date
+        /// 0...1, from whisper's own progress callback. Measured, not estimated.
+        var progress: Double = 0
     }
+
+    /// Outstanding transcriptions, oldest first. The Whisper actor runs them one at a time,
+    /// so everything after the first is queued rather than running.
+    private(set) var jobs: [TranscriptionJob] = [] { didSet { updateIdleTimer() } }
+
+    /// A failed transcription, which is not fatal -- the model is still loaded and the next
+    /// recording can go ahead. Kept apart from `.failed`, which means the model itself is unusable.
+    var lastError: String?
+
     private var whisper: Whisper?
     private let recorder = Recorder()
+
+    /// The record button only needs the model; a transcription in flight does not block it.
+    var canRecord: Bool { state == .ready }
 
     /// Downloads the model on first launch, then loads it once.
     func prepare() async {
@@ -43,32 +58,62 @@ final class AppModel {
     }
 
     func startRecording() async {
+        lastError = nil
         do {
-            try await recorder.start()
-            state = .recording
+            _ = try await recorder.start()
+            isRecording = true
         } catch {
-            state = .failed(error.localizedDescription)
+            lastError = error.localizedDescription
         }
     }
 
+    /// Stops the current recording and transcribes it. The caller can start the next recording
+    /// as soon as this returns from `stop()`; the transcription continues in this task.
     /// Returns the transcribed text, or nil if there was nothing to save.
     func stopAndTranscribe() async -> String? {
-        recorder.stop()
+        guard let url = recorder.stop() else { return nil }
+        isRecording = false
         guard let whisper else { return nil }
-        state = .transcribing
+
+        let job = TranscriptionJob(startedAt: .now)
+        jobs.append(job)
+        defer { jobs.removeAll { $0.id == job.id } }
         do {
-            let text = try await whisper.transcribe(fileAt: recorder.url)
-            recorder.deleteRecording() // only on success, so a failure doesn't lose the audio
-            state = .ready
+            // The callback arrives on whisper's thread, so hop back to update the UI.
+            let text = try await whisper.transcribe(fileAt: url) { [weak self] percent in
+                Task { @MainActor in self?.setProgress(job.id, Double(percent) / 100) }
+            }
+            Recorder.delete(url) // only on success, so a failure doesn't lose the audio
             return text.isEmpty ? nil : text
         } catch {
-            state = .failed(error.localizedDescription)
+            lastError = error.localizedDescription
             return nil
         }
     }
 
+    private func setProgress(_ id: UUID, _ progress: Double) {
+        guard let i = jobs.firstIndex(where: { $0.id == id }) else { return } // already finished
+        jobs[i].progress = progress
+    }
+
     func retry() async {
-        state = .loading
-        if whisper == nil { await prepare() } else { state = .ready }
+        lastError = nil
+        if whisper == nil {
+            state = .loading
+            await prepare()
+        } else {
+            state = .ready
+        }
+    }
+
+    /// Auto-lock would stop a recording or a download, and sleeping mid-transcription
+    /// just makes it take longer. Stay awake while any of that is outstanding.
+    private func updateIdleTimer() {
+        let busy: Bool
+        switch state {
+        case .downloading, .loading: busy = true
+        case .ready, .failed: busy = isRecording || !jobs.isEmpty
+        }
+        UIApplication.shared.isIdleTimerDisabled = busy
     }
 }
