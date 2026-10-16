@@ -43,14 +43,33 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 
 ### 2. Smoke test in the Simulator
 - [x] Optional, to save time: copy the model into the simulator app's Documents folder instead of downloading it.
-- [ ] Record a short clip (Mac mic), check that the text appears, Copy works, and the entry shows up in History.
-- [ ] Kill and relaunch: the model must not re-download, and entries persist. No re-download is
-      confirmed; entry persistence is not, because no entry exists until somebody records one.
+- [x] Record a short clip (Mac mic), check that the text appears, Copy works, and the entry shows up in History.
+      A 3.8 s English question came back as "Is this working?" -- capitalised, with the question mark.
+      That punctuation is the whole reason the app exists, and it is there. Copy put the same string on
+      the simulator pasteboard (which syncs to the Mac's). The entry reached SwiftData; the History
+      list itself is the one thing nobody has looked at yet.
+- [x] Kill and relaunch: the model must not re-download, and entries persist. Both confirmed. The model
+      file came back with an identical inode and mtime, so it was neither re-fetched nor rewritten, and
+      the app went straight to ready. The entry survived in the store.
 
 The simulator needs the CPU backend. Its Metal driver ships buffers to the host GPU over XPC, and
 the model's 573 MB buffer trips an XPC shared-memory limit (`MTLSimDevice newBufferWithLength:` ->
-`_xpc_api_misuse` -> SIGTRAP). A device has unified memory and never takes that path. Only the
-iOS 17.0 runtime is installed, which matches the deployment target.
+`_xpc_api_misuse` -> SIGTRAP). A device has unified memory and never takes that path.
+
+Treat simulator timings as meaningless. That 3.8 s clip took about 100 s on the CPU backend, and
+Whisper pads every request to a 30 s window, so a 4 s clip costs what a 30 s one would -- the worst
+possible showing. Step 4 on the phone, with Metal, is the first real measurement.
+
+What this machine actually has, which is not what the rest of this file assumed:
+
+| | |
+|---|---|
+| Xcode | 27.1, installed from the App Store. A clean build is still warning-free there -- the only `warning:` in the log is appintentsmetadataprocessor noting there is no AppIntents dependency. |
+| Runtime | iOS 27.0, not 17.0. iOS 27.1 ships exactly one device type, an unreleased "iPhone Duo", so iPhone 16 Pro only exists on 27.0. Deployment target 17.0 means it runs either way. |
+| Simulator GUI | `Simulator.app` is gone in Xcode 27 -- it is `DeviceHub.app`, under `Xcode.app/Contents/Applications`. `open -a Simulator` fails, so step 2 needs DeviceHub to get a window to tap. |
+
+The toolchain is declared in the dotfiles repo (`xcodegen` and `mas` as brews, Xcode via `masApps`),
+so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set.
 
 ### 3. Get it on the iPhone (needs the human; see README)
 - [ ] Apple ID in Xcode → Personal Team → put the Team ID in `DEVELOPMENT_TEAM` in `project.yml`.
