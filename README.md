@@ -28,7 +28,7 @@ One-time setup on the Mac:
 3. **Xcode → Settings → Accounts → +** and sign in with your Apple ID.
    This creates a "Personal Team".
 4. Select the **xiuxiu** target, open **Signing & Capabilities**, check
-   **Automatically manage signing**, and set **Team** to *Francesc Campoy (Personal Team)*.
+   **Automatically manage signing**, and set **Team** to *<your name> (Personal Team)*.
    Bundle ID is `cat.campoy.xiuxiu`.
    - So that re-running `xcodegen` doesn't reset the team: copy the Team ID (shown in
      Build Settings → `DEVELOPMENT_TEAM` after you pick the team) into
