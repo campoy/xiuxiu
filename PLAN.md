@@ -75,6 +75,7 @@ iOS 17.0 runtime is installed, which matches the deployment target.
 ## File map
 
 ```
+AGENTS.md                       conventions for coding agents working in this repo
 project.yml                     XcodeGen spec
 Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
 xiuxiu/Config.swift             language, initialPrompt, model URL

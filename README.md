@@ -8,8 +8,9 @@ Entries are saved locally with SwiftData.
 ## Layout
 
 ```
+AGENTS.md                          conventions for coding agents working in this repo
 project.yml                        XcodeGen spec (the .xcodeproj is generated, not committed)
-Packages/WhisperFramework/         SwiftPM wrapper around the official whisper.cpp v1.9.2 XCFramework zip
+Packages/WhisperFramework/         the whisper.cpp v1.9.2 XCFramework, vendored, plus its SwiftPM wrapper
 xiuxiu/Config.swift                language, initial prompt, model URL  ← the knobs
 xiuxiu/Whisper.swift               whisper.cpp context (loaded once) + transcription
 xiuxiu/Recorder.swift              16 kHz mono PCM WAV recording
@@ -24,7 +25,7 @@ One-time setup on the Mac:
 
 1. `brew install xcodegen`
 2. In this repo: `xcodegen` creates `xiuxiu.xcodeproj`. Then `open xiuxiu.xcodeproj`.
-   Xcode resolves the whisper package by downloading a ~54 MB zip. Wait for it to finish.
+   The whisper XCFramework is committed to the repo, so there is nothing to download.
 3. **Xcode → Settings → Accounts → +** and sign in with your Apple ID.
    This creates a "Personal Team".
 4. Select the **xiuxiu** target, open **Signing & Capabilities**, check
@@ -63,10 +64,13 @@ Limits of a free account:
 - **Core ML is off.** Metal already runs the whole model on the GPU. Adding the Core ML encoder
   (`ggml-large-v3-turbo-encoder.mlmodelc`, ~1.2 GB extra download) would run the encoder on the
   Neural Engine. That's maybe 2–3× faster encoding, but the first load compiles the model for minutes. It's
-  only worth it if transcription feels slow on the 16 Pro.
+  only worth it if transcription feels slow on the 16 Pro. No code change is needed: the vendored
+  XCFramework has Core ML compiled in and probes for that file in Documents on every init,
+  falling back silently when it is absent.
 - Decoding is greedy (fastest). Beam search (`WHISPER_SAMPLING_BEAM_SEARCH`, beam 5) is a bit
   more accurate and noticeably slower.
 - whisper.cpp v1.9.3+ ship no prebuilt XCFramework. To upgrade, build one with
-  `./build-xcframework.sh` from a whisper.cpp checkout and point the package at it.
+  `./build-xcframework.sh` from a whisper.cpp checkout and replace
+  `Packages/WhisperFramework/whisper.xcframework` with it.
 - Recording stops if you leave the app. Fine for short entries; long ones would need
   `UIBackgroundModes: audio`.
