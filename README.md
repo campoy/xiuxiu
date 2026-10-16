@@ -54,10 +54,15 @@ Limits of a free account:
 ## Knobs (`xiuxiu/Config.swift`)
 
 - `language`: `"auto"` by default. Set it to `"es"`, `"en"`, `"ca"`, … to force one language.
-  Auto-detect only listens to the first 30 s, so an entry that starts in Spanish
-  tends to come out in Spanish throughout. Forcing a language can *translate* the other one.
-- `initialPrompt`: Whisper imitates its style. The punctuated Spanish/English mix nudges it
-  towards punctuation and code-switching. Tweak it if output drifts.
+  Auto-detect only listens to the first 30 s, so an entry that starts in one language
+  tends to come out in it throughout. Forcing a language can *translate* the other one.
+- `initialPrompt`: Whisper imitates its style **and continues its language**. That second part
+  matters more than it sounds: with a Spanish/English-only prompt, French audio came back as
+  broken Spanish — *"Hoy hoy hoy trabajo por un nuevo proyecto"* — even though auto-detect had
+  correctly reported `fr`. Detection was never the problem; the prompt was overriding it. The
+  prompt now also carries a French and a Catalan sentence, which fixes French and leaves Catalan
+  and the Spanish/English code-switching unchanged. If you journal in another language, add a
+  punctuated sentence of it here rather than reaching for `language`.
 
 ## Notes / possible next steps
 
