@@ -1,7 +1,8 @@
 # xiuxiu — design plan
 
 Handoff for a Claude Code session running on the Mac (which has Xcode, unlike the
-cloud session that wrote v1). The v1 code in this repo has **never been compiled**.
+cloud session that wrote v1). The v1 code compiles clean for the simulator as written; what
+is left is running it against real audio and getting it onto the phone.
 
 ## Goal
 
@@ -15,7 +16,7 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 |---|---|
 | Device | iPhone 16 Pro (8 GB RAM), iOS 26. Deployment target iOS 17. |
 | UI | SwiftUI, single target, no third-party deps besides whisper.cpp |
-| whisper.cpp | Prebuilt XCFramework from the **v1.9.2** release zip via a local SwiftPM `binaryTarget` (`Packages/WhisperFramework`). v1.9.3–v1.9.5 ship no XCFramework. |
+| whisper.cpp | Prebuilt **v1.9.2** XCFramework, vendored at `Packages/WhisperFramework/whisper.xcframework` and wired up with a local SwiftPM `binaryTarget` path, so a clone builds offline. v1.9.3–v1.9.5 ship no XCFramework. |
 | Model | `ggml-large-v3-turbo-q5_0.bin` (~550 MB), downloaded from Hugging Face on first launch into Documents, excluded from backup, loaded **once** |
 | Acceleration | Metal on (default). Core ML off for v1. Revisit only if transcription is slow. |
 | Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor) |
@@ -32,20 +33,24 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 ## Steps
 
 ### 1. Build it (Mac session)
-- [ ] `brew install xcodegen` (if missing), then `xcodegen` in the repo root.
-- [ ] `xcodebuild -project xiuxiu.xcodeproj -scheme xiuxiu -destination 'generic/platform=iOS Simulator' build`
-      and fix compile errors until it's clean. Areas most likely to need fixes:
-  - `Whisper.swift`: C interop (`whisper_full_params` field types, `WHISPER_SAMPLING_GREEDY`,
-    pointer lifetimes in the nested `withCString` calls).
-  - Swift concurrency warnings around `AppModel` (`@MainActor @Observable`) and `ModelDownloader`.
-  - SwiftPM resolving the `binaryTarget` (zip has `build-apple/whisper.xcframework` inside).
-- [ ] Verify `curl -sIL https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin`
-      ends in a 200 with a ~550 MB `content-length`. This URL hasn't been verified yet.
+- [x] `brew install xcodegen` (if missing), then `xcodegen` in the repo root.
+- [x] `xcodebuild -project xiuxiu.xcodeproj -scheme xiuxiu -destination 'generic/platform=iOS Simulator' build`
+      and fix compile errors until it's clean. None of the expected trouble spots needed a
+      fix: the `whisper.h` C interop, the `@MainActor @Observable` concurrency, and the SwiftPM
+      `binaryTarget` all compiled as written, with no warnings.
+- [x] Verify `curl -sIL https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin`
+      ends in a 200 with a ~550 MB `content-length`. Verified: 200, `content-length: 574041195`.
 
 ### 2. Smoke test in the Simulator
-- [ ] Optional, to save time: copy the model into the simulator app's Documents folder instead of downloading it.
+- [x] Optional, to save time: copy the model into the simulator app's Documents folder instead of downloading it.
 - [ ] Record a short clip (Mac mic), check that the text appears, Copy works, and the entry shows up in History.
-- [ ] Kill and relaunch: the model must not re-download, and entries persist.
+- [ ] Kill and relaunch: the model must not re-download, and entries persist. No re-download is
+      confirmed; entry persistence is not, because no entry exists until somebody records one.
+
+The simulator needs the CPU backend. Its Metal driver ships buffers to the host GPU over XPC, and
+the model's 573 MB buffer trips an XPC shared-memory limit (`MTLSimDevice newBufferWithLength:` ->
+`_xpc_api_misuse` -> SIGTRAP). A device has unified memory and never takes that path. Only the
+iOS 17.0 runtime is installed, which matches the deployment target.
 
 ### 3. Get it on the iPhone (needs the human; see README)
 - [ ] Apple ID in Xcode → Personal Team → put the Team ID in `DEVELOPMENT_TEAM` in `project.yml`.
@@ -59,16 +64,19 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 - [ ] Deny mic permission once, then confirm the error message is clear and re-enabling it works.
 
 ### 5. Iterate (only if step 4 shows a need)
-- Slow → Core ML encoder (`ggml-large-v3-turbo-encoder.mlmodelc`) or fewer/more threads.
+- Slow → Core ML encoder or fewer/more threads. The vendored XCFramework already has Core ML
+  compiled in and probes for `ggml-large-v3-turbo-encoder.mlmodelc` in Documents on every init,
+  falling back silently when it is absent, so turning it on means shipping that file, not changing code.
 - Language gets flattened to one → tune `initialPrompt`, or try forcing `"es"`/`"en"`.
 - Inaccurate → beam search (`WHISPER_SAMPLING_BEAM_SEARCH`, beam 5).
-- Need newer whisper.cpp → build an XCFramework with `./build-xcframework.sh` and point the package at it.
+- Need newer whisper.cpp → build an XCFramework with `./build-xcframework.sh` and replace the
+  vendored `Packages/WhisperFramework/whisper.xcframework` with it.
 
 ## File map
 
 ```
 project.yml                     XcodeGen spec
-Packages/WhisperFramework/      binaryTarget wrapper for whisper.xcframework
+Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
 xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:)
 xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording
