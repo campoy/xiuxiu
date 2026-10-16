@@ -1,0 +1,33 @@
+name: xiuxiu
+options:
+  bundleIdPrefix: cat.campoy
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  WhisperFramework:
+    path: Packages/WhisperFramework
+targets:
+  xiuxiu:
+    type: application
+    platform: iOS
+    sources: [xiuxiu]
+    dependencies:
+      - package: WhisperFramework
+        product: whisper
+    info:
+      path: xiuxiu/Info.plist
+      properties:
+        CFBundleDisplayName: xiuxiu
+        NSMicrophoneUsageDescription: xiuxiu records your voice so it can transcribe it on-device.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cat.campoy.xiuxiu
+        # Put your Personal Team ID here so re-running xcodegen keeps signing set up.
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
