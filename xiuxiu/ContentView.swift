@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var app = AppModel()
     @State private var entry: Entry?
+    @State private var showHistory = false
 
     var body: some View {
         NavigationStack {
@@ -25,6 +26,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Nit.ground(scheme).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showHistory) { HistoryView() }
             .toolbarBackground(Nit.ground(scheme), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -52,7 +54,13 @@ struct ContentView: View {
         // attempt to open the app is best effort, so this is what makes a share that arrived
         // while the app was closed -- or that failed to wake it -- still turn into an entry.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await drainInbox() } }
+            if phase == .active {
+                Task { await drainInbox() }
+            } else {
+                // Lock behind us. Otherwise History stays open in the app switcher and across
+                // a hand-over, which is most of what this is meant to prevent.
+                showHistory = false
+            }
         }
         .onOpenURL { url in
             Task {
@@ -93,7 +101,18 @@ struct ContentView: View {
     }
 
     private var historyLink: some View {
-        NavigationLink { HistoryView() } label: {
+        Button {
+            Task {
+                switch await Lock.authenticate() {
+                case .unlocked:
+                    showHistory = true
+                case .cancelled:
+                    break
+                case .failed(let message):
+                    app.lastError = message
+                }
+            }
+        } label: {
             Text("History").metaLabel().foregroundStyle(Nit.accent(scheme))
         }
     }

@@ -23,6 +23,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSMicrophoneUsageDescription: xiuxiu records your voice so it can transcribe it on-device.
+        # Required for Face ID. Without it the app is killed the moment it asks.
+        NSFaceIDUsageDescription: xiuxiu uses Face ID so only you can read your journal.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # Without this, canOpenURL("dayone2://") always answers false and the
@@ -53,8 +55,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "0.2"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.3"
+        CURRENT_PROJECT_VERSION: "3"
 
   # Courier only: copies shared audio into the App Group inbox and wakes the app.
   xiuxiuShare:
@@ -86,5 +88,5 @@ targets:
         CODE_SIGN_ENTITLEMENTS: xiuxiuShare/xiuxiuShare.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "0.2"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "0.3"
+        CURRENT_PROJECT_VERSION: "3"

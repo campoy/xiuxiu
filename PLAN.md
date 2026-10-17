@@ -252,6 +252,28 @@ goes wrong. iOS clears `tmp` on its own, so this is noted rather than fixed.
 - [ ] Settle Day One by sharing from the audio attachment itself rather than the entry, and
       checking whether the share diagnostic shows up in the app afterwards.
 
+### 10. Face ID on History
+
+What you just dictated is on screen anyway; everything you have ever written was one tap away.
+History now asks first.
+
+- [x] `LAPolicy.deviceOwnerAuthentication`, not `.deviceOwnerAuthenticationWithBiometrics`. The
+      biometrics-only policy has no fallback, so a mask, a dark room or a failed sensor would
+      lock you out of years of entries with no way back in. This drops through to the passcode.
+- [x] If the phone has neither passcode nor biometrics, History opens. There is nothing to
+      authenticate against, and refusing would seal the entries away for good on a device that
+      is not protecting anything else either.
+- [x] `NSFaceIDUsageDescription` in `project.yml`. Without it iOS kills the app the moment it
+      asks for Face ID -- a crash, not a refusal.
+- [x] Cancelling is silent. It is a deliberate act, not an error worth reporting back.
+- [x] Leaving the app closes History, so returning asks again rather than leaving entries open
+      in the app switcher or across a hand-over, which is most of what this is for.
+- [ ] Confirm on the phone. Face ID could not be exercised here: the simulator has no way to tap
+      History, and simulated biometrics are not the real sensor anyway.
+
+Not gated: the entry on the main screen after recording. That is the thing you are looking at
+when you record it, and locking it would mean authenticating to read your own sentence back.
+
 ## File map
 
 ```
@@ -261,6 +283,7 @@ Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarge
 xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Theme.swift              the Nit palette and the metadata label style
 xiuxiu/DayOne.swift             dayone2:// hand-off
+xiuxiu/Lock.swift               Face ID (or passcode) in front of History
 Shared/Inbox.swift              App Group inbox, compiled into both targets
 xiuxiuShare/                    share extension: copies audio in, wakes the app
 design/appicon.svg              app icon source; render with rsvg-convert
