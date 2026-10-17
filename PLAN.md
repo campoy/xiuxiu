@@ -72,13 +72,25 @@ The toolchain is declared in the dotfiles repo (`xcodegen` and `mas` as brews, X
 so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set.
 
 ### 3. Get it on the iPhone (needs the human; see README)
-- [ ] Apple ID in Xcode → Personal Team → put the Team ID in `DEVELOPMENT_TEAM` in `project.yml`.
-- [ ] Trust the computer, turn on Developer Mode, ⌘R, then trust the developer profile on the phone.
-- [ ] First launch: model download on Wi-Fi, then load.
+- [x] Apple ID in Xcode → Personal Team → put the Team ID in `DEVELOPMENT_TEAM` in `project.yml`.
+      The Team ID is the signing certificate's **OU**, not the id in its common name -- the
+      certificate reads `Apple Development: <email> (3HPW3CG3K5)` while the team is `88X2U864WM`.
+      Read it with `security find-certificate -c "Apple Development: <email>" -p | openssl x509
+      -noout -subject`. Signing in to Xcode alone creates no certificate; one appears only once a
+      team is selected for the target, which is also what unblocks `-allowProvisioningUpdates`.
+- [x] Trust the computer, turn on Developer Mode, ⌘R, then trust the developer profile on the phone.
+      `xcodebuild -allowProvisioningUpdates` plus `xcrun devicectl device install app` does this
+      without opening Xcode, once the team is set. The device showed `connected (no DDI)` until the
+      first install, which mounted the disk image on its own. The first launch is still refused with
+      "Untrusted Developer" until the profile is trusted on the phone; that is expected, not a fault.
+- [x] First launch: model download on Wi-Fi, then load. Done; the app runs on the phone.
 
 ### 4. Validate on device
 - [ ] Record about 1, 3 and 5 minute entries mixing Spanish and English. Note transcription time and
-      punctuation quality.
+      punctuation quality. This is the first measurement that means anything: every earlier number
+      came from the simulator's CPU backend, and the device is the first run on Metal at all.
+- [ ] Record a Catalan entry. Catalan coming out as Spanish was reported but could not be reproduced
+      with synthesised speech, so real audio is what will settle it. See step 6's prompt note.
 - [ ] Watch memory in the Xcode debug navigator during transcription (expect around 1 GB).
 - [ ] Deny mic permission once, then confirm the error message is clear and re-enabling it works.
 
@@ -133,6 +145,32 @@ Two things worth knowing about the design:
   the screen for however long a transcription takes. If a result arrives while an earlier entry is
   being edited, the editor does swap to the new one -- the edit is already saved, but the cursor moves.
 
+### 7. Look and feel
+
+- [x] Theme "Nit": cool ink ground, warm terracotta accent, cream text; light mode is warm
+      paper rather than white, so the two appearances share a temperature instead of
+      swapping personality. Constants in `Theme.swift`, not an asset catalog colour set --
+      five colours in two appearances is less machinery than a catalog, and it stays greppable.
+- [x] The transcript is set in a serif (`.system(.body, design: .serif)`). Single highest-leverage
+      change: it stops reading as a form field and starts reading as writing.
+- [x] Metadata is small, tracked and upper case, so dates and status stop competing with the text.
+- [x] Record button down from 120pt to 68pt with a hairline ring. The button you press twice
+      should not outweigh the text you keep. A filled halo was tried first and muddied to brown
+      over ink; a stroke stays legible in both appearances.
+- [x] App icon: "Pals ona" -- la senyera's four pals stood upright with waveform heights, so the
+      mark says Catalan and audio at once. Source is `design/appicon.svg`; the 1024 PNG is
+      rendered with `rsvg-convert` and lives in `xiuxiu/Assets.xcassets`. Muted gold and red
+      (`#EFBF2E`/`#CC3328`) rather than the official `#FCDD09`/`#DA121A`, which is built to be
+      read across a flag and is very loud inside a 60pt rounded square. Before this there was no
+      asset catalog at all and iOS drew the blank placeholder.
+- [x] UI copy stays English; only the icon carries the Catalan.
+- [x] On the phone. Both appearances have only been *screenshotted* in the simulator, so the
+      daylight judgement is still yours to make.
+
+iOS 26 wraps toolbar buttons in a glass pill, which reads as stray chrome on a flat ground.
+`buttonStyle` does not reach it -- the background belongs to the toolbar, not the button -- so
+it needs `sharedBackgroundVisibility(.hidden)` on the `ToolbarItem`, behind an availability check.
+
 ## File map
 
 ```
@@ -140,6 +178,8 @@ AGENTS.md                       conventions for coding agents working in this re
 project.yml                     XcodeGen spec
 Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
 xiuxiu/Config.swift             language, initialPrompt, model URL
+xiuxiu/Theme.swift              the Nit palette and the metadata label style
+design/appicon.svg              app icon source; render with rsvg-convert
 xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:)
 xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording, one file per clip
 xiuxiu/ModelDownloader.swift    URLSession download with progress, atomic move into Documents

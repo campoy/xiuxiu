@@ -24,10 +24,12 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cat.campoy.xiuxiu
-        # Put your Personal Team ID here so re-running xcodegen keeps signing set up.
-        DEVELOPMENT_TEAM: ""
+        # Personal Team ID, so re-running xcodegen keeps signing set up. This is the
+        # certificate's OU, not the id in its common name -- those differ.
+        DEVELOPMENT_TEAM: "88X2U864WM"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- xiuxiu app icon: "Pals ona". La senyera's four pals stood upright and given
+     waveform heights. Muted palette, because the official #FCDD09/#DA121A pair is
+     built to be read across a flag, not inside a 60pt rounded square. Full bleed and
+     no alpha: iOS masks the squircle itself and rejects app icons with transparency. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#EFBF2E"/>
+  <g fill="#CC3328">
+    <rect x="14" y="32" width="12" height="36" rx="6"/>
+    <rect x="34" y="18" width="12" height="64" rx="6"/>
+    <rect x="54" y="25" width="12" height="50" rx="6"/>
+    <rect x="74" y="36" width="12" height="28" rx="6"/>
+  </g>
+</svg>

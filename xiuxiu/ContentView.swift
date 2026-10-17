@@ -3,56 +3,100 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var scheme
     @State private var app = AppModel()
     @State private var entry: Entry?
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            VStack(spacing: 14) {
                 status
                 if let entry {
                     EntryEditor(entry: entry)
                 } else {
-                    Spacer()
+                    emptyState
                 }
+                if !app.jobs.isEmpty { transcribingStack }
                 recordButton
             }
-            .padding()
-            .navigationTitle("xiuxiu")
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Nit.ground(scheme).ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Nit.ground(scheme), for: .navigationBar)
             .toolbar {
-                NavigationLink("History") { HistoryView() }
+                ToolbarItem(placement: .principal) {
+                    Text("xiuxiu")
+                        .font(.system(.headline, design: .serif))
+                        .foregroundStyle(Nit.text(scheme))
+                }
+                // iOS 26 gives toolbar buttons a glass pill, which reads as stray chrome
+                // against a flat ground. buttonStyle does not reach it -- the background is
+                // the toolbar's, not the button's -- so it has to be hidden on the item.
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) { historyLink }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) { historyLink }
+                }
             }
         }
+        .tint(Nit.accent(scheme))
         .task { await app.prepare() }
+    }
+
+    private var historyLink: some View {
+        NavigationLink { HistoryView() } label: {
+            Text("History").metaLabel().foregroundStyle(Nit.accent(scheme))
+        }
     }
 
     @ViewBuilder private var status: some View {
         switch app.state {
         case .downloading(let p):
-            VStack {
-                Text("Downloading Whisper model (~550 MB)…")
-                ProgressView(value: p)
-                Text("\(Int(p * 100))%").monospacedDigit()
+            VStack(spacing: 8) {
+                Text("Downloading Whisper model (~550 MB)").metaLabel()
+                ProgressView(value: p).tint(Nit.accent(scheme))
+                Text("\(Int(p * 100))%").metaLabel().monospacedDigit()
             }
+            .foregroundStyle(Nit.dim(scheme))
+            .padding(.top, 8)
         case .loading:
-            ProgressView("Loading model…")
+            Text("Loading model").metaLabel().foregroundStyle(Nit.dim(scheme)).padding(.top, 8)
         case .failed(let message):
-            VStack {
-                Text(message).foregroundStyle(.red)
+            VStack(spacing: 10) {
+                Text(message).font(.footnote).foregroundStyle(Nit.live(scheme))
+                    .multilineTextAlignment(.center)
                 Button("Retry") { Task { await app.retry() } }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Nit.accent(scheme))
             }
+            .padding(.top, 8)
         case .ready:
             // Recording and transcribing overlap, so this reports both rather than choosing.
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 if app.isRecording {
-                    Label("Recording…", systemImage: "waveform").foregroundStyle(.red)
+                    Text("● Recording").metaLabel().foregroundStyle(Nit.live(scheme))
                 }
-                if !app.jobs.isEmpty { transcribingStack }
                 if let lastError = app.lastError {
-                    Text(lastError).font(.caption).foregroundStyle(.red).multilineTextAlignment(.center)
+                    Text(lastError).font(.caption).foregroundStyle(Nit.live(scheme))
+                        .multilineTextAlignment(.center)
                 }
             }
+            .padding(.top, 4)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack {
+            Spacer()
+            if case .ready = app.state, !app.isRecording, app.jobs.isEmpty {
+                Text("Tap to speak")
+                    .font(.system(.body, design: .serif))
+                    .foregroundStyle(Nit.dim(scheme))
+            }
+            Spacer()
         }
     }
 
@@ -64,22 +108,25 @@ struct ContentView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(spacing: 0) {
                 ForEach(app.jobs) { job in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 5) {
                         HStack {
-                            Text(job.startedAt, format: .dateTime.hour().minute().second())
+                            Text(job.progress > 0 ? "Transcribing" : "Queued").metaLabel()
                             Spacer()
-                            Text(Self.elapsed(from: job.startedAt, to: context.date)).monospacedDigit()
+                            Text(Self.elapsed(from: job.startedAt, to: context.date))
+                                .metaLabel().monospacedDigit()
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Nit.dim(scheme))
                         ProgressView(value: job.progress)
+                            .tint(Nit.accent(scheme))
                     }
-                    .padding(.vertical, 8)
-                    if job.id != app.jobs.last?.id { Divider() }
+                    .padding(.vertical, 10)
+                    if job.id != app.jobs.last?.id {
+                        Divider().overlay(Nit.line(scheme))
+                    }
                 }
             }
-            .padding(.horizontal, 12)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+            .padding(.horizontal, 14)
+            .background(Nit.raised(scheme), in: .rect(cornerRadius: 12))
         }
     }
 
@@ -90,6 +137,7 @@ struct ContentView: View {
 
     private var recordButton: some View {
         let recording = app.isRecording
+        let colour = recording ? Nit.live(scheme) : Nit.accent(scheme)
         return Button {
             // Each tap gets its own Task, so stopping one clip never blocks starting the next:
             // the transcription runs on in the task that stopped it.
@@ -108,63 +156,102 @@ struct ContentView: View {
             }
         } label: {
             Image(systemName: recording ? "stop.fill" : "mic.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.white)
-                .frame(width: 120, height: 120)
-                .background(Circle().fill(recording ? Color.red : Color.accentColor))
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(Nit.ground(scheme))
+                .frame(width: 68, height: 68)
+                .background(Circle().fill(colour))
+                // A hairline ring rather than a filled halo: a tinted fill over ink muddies
+                // into brown, while a stroke stays legible in both appearances.
+                .overlay(
+                    Circle().stroke(colour.opacity(0.28), lineWidth: 1.5)
+                        .frame(width: 84, height: 84)
+                )
         }
         .disabled(!app.canRecord)
         .opacity(app.canRecord ? 1 : 0.4)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
     }
 }
 
 /// Editable text for one entry. SwiftData autosaves edits.
 struct EntryEditor: View {
+    @Environment(\.colorScheme) private var scheme
     @Bindable var entry: Entry
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Text(entry.date, format: .dateTime.weekday().day().month().hour().minute())
-                .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(entry.date, format: .dateTime.weekday(.wide).day().month(.wide).hour().minute())
+                .metaLabel()
+                .foregroundStyle(Nit.dim(scheme))
+
+            // Serif, because this is the writing -- the one thing on screen worth reading.
             TextEditor(text: $entry.text)
-                .font(.body)
+                .font(.system(.body, design: .serif))
+                .foregroundStyle(Nit.text(scheme))
                 .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+                .padding(10)
+                .background(Nit.raised(scheme), in: .rect(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12).stroke(Nit.line(scheme), lineWidth: 1)
+                )
+
             Button {
                 UIPasteboard.general.string = entry.text
             } label: {
-                Label("Copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+                Text("Copy").metaLabel()
+                    .foregroundStyle(Nit.dim(scheme))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .overlay(Capsule().stroke(Nit.line(scheme), lineWidth: 1))
             }
-            .buttonStyle(.borderedProminent)
         }
     }
 }
 
 struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var scheme
     @Query(sort: \Entry.date, order: .reverse) private var entries: [Entry]
 
     var body: some View {
         List {
             ForEach(entries) { entry in
                 NavigationLink {
-                    EntryEditor(entry: entry).padding().navigationTitle("Entry")
+                    EntryEditor(entry: entry)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .background(Nit.ground(scheme).ignoresSafeArea())
+                        .navigationTitle("Entry")
                 } label: {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(entry.date, format: .dateTime.year().month().day().hour().minute())
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text(entry.text).lineLimit(2)
+                            .metaLabel()
+                            .foregroundStyle(Nit.dim(scheme))
+                        Text(entry.text)
+                            .font(.system(.body, design: .serif))
+                            .foregroundStyle(Nit.text(scheme))
+                            .lineLimit(2)
                     }
+                    .padding(.vertical, 4)
                 }
             }
             .onDelete { offsets in
                 for i in offsets { modelContext.delete(entries[i]) }
             }
+            .listRowBackground(Nit.ground(scheme))
+            .listRowSeparatorTint(Nit.line(scheme))
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Nit.ground(scheme).ignoresSafeArea())
         .navigationTitle("History")
         .overlay {
-            if entries.isEmpty { ContentUnavailableView("No entries yet", systemImage: "mic") }
+            if entries.isEmpty {
+                Text("No entries yet")
+                    .font(.system(.body, design: .serif))
+                    .foregroundStyle(Nit.dim(scheme))
+            }
         }
     }
 }
