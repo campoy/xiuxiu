@@ -148,8 +148,11 @@ actor Whisper {
             if let conversionError { throw conversionError }
 
             if output.frameLength > 0, let data = output.floatChannelData {
-                samples.append(contentsOf: UnsafeBufferPointer(start: data[0],
-                                                               count: Int(output.frameLength)))
+                // Resampling can overshoot: a real Day One recording came out with a peak of
+                // 1.17, and Whisper is documented to want [-1, 1]. Clamping is cheaper than
+                // normalising and does not change the level of anything already in range.
+                let converted = UnsafeBufferPointer(start: data[0], count: Int(output.frameLength))
+                samples.append(contentsOf: converted.lazy.map { min(max($0, -1), 1) })
             }
             if status == .endOfStream || status == .error { break }
         }
