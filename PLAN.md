@@ -107,7 +107,21 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
   compiled in and probes for `ggml-large-v3-turbo-encoder.mlmodelc` in Documents on every init,
   falling back silently when it is absent, so turning it on means shipping that file, not changing code.
 - Language gets flattened to one → tune `initialPrompt`, or try forcing `"es"`/`"en"`.
-- Inaccurate → beam search (`WHISPER_SAMPLING_BEAM_SEARCH`, beam 5).
+- Inaccurate → **not beam search**. Measured on a real 3-minute recording rather than assumed,
+  and it is worse, not "a bit more accurate and noticeably slower":
+
+  | config | words | identical adjacent sentences | worst single repeat |
+  |---|---|---|---|
+  | greedy | 256 | 2 | x2 |
+  | beam 5 | 485 | 19 | **x18** |
+
+  Beam search nearly doubles the output, but by looping rather than by catching more speech --
+  one sentence came back eighteen times. It is also only marginally slower (6.1 s against 5.5 s),
+  so there is no trade-off to weigh: it is worse output at worse speed. Greedy stays.
+
+  `no_context` was tested at the same time, on the theory that repetition comes from carrying
+  text between 30 s windows. It changed nothing -- byte-identical output -- because whisper.cpp
+  already defaults it on. Not the cause, and not a knob worth touching.
 - Need newer whisper.cpp → build an XCFramework with `./build-xcframework.sh` and replace the
   vendored `Packages/WhisperFramework/whisper.xcframework` with it.
 
