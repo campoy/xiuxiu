@@ -71,17 +71,89 @@ actor Whisper {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Reads a 16 kHz mono file as Float samples in [-1, 1], which is what Whisper wants.
+    /// Reads any audio file as 16 kHz mono Float samples in [-1, 1], which is what Whisper wants.
+    /// Clips recorded here are already in that format and take the fast path. Clips shared in from
+    /// other apps are not -- Voice Memos hands over 44.1 or 48 kHz m4a -- so they are decoded,
+    /// downmixed and resampled here rather than rejected.
+    ///
+    /// Deliberately synchronous, and converted in chunks rather than by reading the whole file.
+    /// Synchronous because `transcribe` is an actor method with no suspension points, so one
+    /// transcription runs start to finish without another interleaving on the shared context;
+    /// chunked because a five-minute 48 kHz stereo file is over 100 MB decoded, against a memory
+    /// budget already mostly spent on the model.
     private func readSamples(_ url: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
-        guard file.processingFormat.sampleRate == 16_000, file.processingFormat.channelCount == 1 else {
-            throw XiuxiuError("Unexpected audio format: \(file.processingFormat)")
+        let source = file.processingFormat
+
+        guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                         sampleRate: 16_000, channels: 1, interleaved: false) else {
+            throw XiuxiuError("Couldn't describe the 16 kHz mono format.")
         }
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
+
+        if source.sampleRate == target.sampleRate, source.channelCount == 1 {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: source,
+                                                frameCapacity: AVAudioFrameCount(file.length)) else {
+                throw XiuxiuError("Couldn't allocate audio buffer.")
+            }
+            try file.read(into: buffer)
+            guard let data = buffer.floatChannelData else { return [] }
+            return Array(UnsafeBufferPointer(start: data[0], count: Int(buffer.frameLength)))
+        }
+
+        guard let converter = AVAudioConverter(from: source, to: target) else {
+            throw XiuxiuError("Can't convert \(source) to 16 kHz mono.")
+        }
+
+        let chunk: AVAudioFrameCount = 32_768
+        guard let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: chunk) else {
             throw XiuxiuError("Couldn't allocate audio buffer.")
         }
-        try file.read(into: buffer)
-        return Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+
+        let ratio = target.sampleRate / source.sampleRate
+        let outCapacity = AVAudioFrameCount(Double(chunk) * ratio) + 1024
+
+        var samples: [Float] = []
+        samples.reserveCapacity(Int(Double(file.length) * ratio) + Int(outCapacity))
+
+        while true {
+            guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outCapacity) else {
+                throw XiuxiuError("Couldn't allocate audio buffer.")
+            }
+
+            var readError: Error?
+            var conversionError: NSError?
+            let status = converter.convert(to: output, error: &conversionError) { _, outStatus in
+                // Stop before reading past the end: AVAudioFile throws eofErr (OSStatus -39)
+                // rather than returning zero frames, so EOF would otherwise look like failure.
+                guard file.framePosition < file.length else {
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
+                do {
+                    try file.read(into: input, frameCount: chunk)
+                } catch {
+                    readError = error
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
+                guard input.frameLength > 0 else {
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
+                outStatus.pointee = .haveData
+                return input
+            }
+
+            if let readError { throw readError }
+            if let conversionError { throw conversionError }
+
+            if output.frameLength > 0, let data = output.floatChannelData {
+                samples.append(contentsOf: UnsafeBufferPointer(start: data[0],
+                                                               count: Int(output.frameLength)))
+            }
+            if status == .endOfStream || status == .error { break }
+        }
+        return samples
     }
 }
 

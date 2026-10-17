@@ -44,6 +44,16 @@ struct ContentView: View {
         }
         .tint(Nit.accent(scheme))
         .task { await app.prepare() }
+        // A recording shared in from another app becomes an entry like any other.
+        .onOpenURL { url in
+            Task {
+                if let text = await app.transcribeShared(url) {
+                    let new = Entry(text: text)
+                    modelContext.insert(new)
+                    entry = new
+                }
+            }
+        }
     }
 
     private var historyLink: some View {

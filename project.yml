@@ -24,6 +24,16 @@ targets:
         # Without this, canOpenURL("dayone2://") always answers false and the
         # Day One button would never appear even with Day One installed.
         LSApplicationQueriesSchemes: [dayone2]
+        # Makes xiuxiu an audio handler, so "Copy to xiuxiu" appears in the share sheet
+        # and in Open In. The file arrives at onOpenURL. Alternate rank, because this is
+        # not the app that should own audio files on the phone -- it only borrows them.
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio recording
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.audio
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cat.campoy.xiuxiu

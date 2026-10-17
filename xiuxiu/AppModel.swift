@@ -75,6 +75,41 @@ final class AppModel {
         isRecording = false
         guard let whisper else { return nil }
 
+        return await run(whisper, on: url)
+    }
+
+    /// Transcribes an audio file handed over by another app, so a Voice Memo or a voice note
+    /// becomes an entry exactly like something recorded here. The file is converted to 16 kHz
+    /// mono on the way in; see `Whisper.readSamples`.
+    func transcribeShared(_ url: URL) async -> String? {
+        // A share can land before the model has finished loading. prepare() returns immediately
+        // once it has, so this just waits for the first launch rather than dropping the file.
+        await prepare()
+        guard let whisper else {
+            lastError = "The model isn't loaded yet. Try sharing it again in a moment."
+            return nil
+        }
+
+        // Files from other apps are security-scoped and the original may be gone by the time
+        // transcription finishes, so take a copy first and work from that.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        let ext = url.pathExtension.isEmpty ? "m4a" : url.pathExtension
+        let local = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shared-\(UUID().uuidString).\(ext)")
+        do {
+            try FileManager.default.copyItem(at: url, to: local)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+
+        return await run(whisper, on: local)
+    }
+
+    /// The shared tail of both paths: show a job, transcribe, bin the audio on success only.
+    private func run(_ whisper: Whisper, on url: URL) async -> String? {
         let job = TranscriptionJob(startedAt: .now)
         jobs.append(job)
         defer { jobs.removeAll { $0.id == job.id } }

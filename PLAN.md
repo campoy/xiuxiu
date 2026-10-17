@@ -189,6 +189,36 @@ copy and paste.
 
 Day One on this phone is `com.bloombuilt.dayone-ios` 2026.20.
 
+### 9. Share a recording in
+
+A recording made elsewhere -- a Voice Memo, a voice note -- should become an entry exactly
+like one recorded here, rather than needing to be re-spoken into the app.
+
+- [x] Declare the app an audio handler: `CFBundleDocumentTypes` for `public.audio` at
+      `LSHandlerRank: Alternate`, plus `LSSupportsOpeningDocumentsInPlace`. Alternate because
+      xiuxiu should not try to own audio files on the phone, only offer to borrow them.
+      The file arrives at `onOpenURL`.
+- [x] Convert the audio. This was the actual work, not the plumbing: `readSamples` used to
+      *reject* anything that was not already 16 kHz mono, and Voice Memos hands over 44.1 or
+      48 kHz m4a, so every share would have bounced. It now decodes, downmixes and resamples
+      with `AVAudioConverter`, in chunks -- a five-minute 48 kHz stereo file is over 100 MB
+      decoded, against a budget already mostly spent on the model.
+- [x] Copy the incoming file before transcribing. It is security-scoped and the original can
+      be gone by the time a transcription finishes.
+- [x] Wait for the model if a share lands during first launch, rather than dropping the file.
+- [x] Verified end to end on the simulator with a deliberately wrong-format file (44.1 kHz
+      stereo AAC): came back fully transcribed and punctuated, code-switching intact.
+- [ ] Share a real Voice Memo on the phone. The conversion is backend-independent, so this is
+      expected to hold, but Metal is a different path and it has not been exercised there.
+
+Worth knowing, because it would have broken the feature completely and silently: `AVAudioFile.read`
+throws `eofErr` (OSStatus -39) at end of file rather than returning zero frames. Treating that as
+a failure meant every conversion died on its last chunk, with an opaque number as the only clue.
+The loop checks `framePosition < length` before reading instead of inferring EOF from an error.
+
+Failed transcriptions deliberately keep their audio, so `tmp` accumulates orphans when something
+goes wrong. iOS clears `tmp` on its own, so this is noted rather than fixed.
+
 ## File map
 
 ```
@@ -199,7 +229,8 @@ xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Theme.swift              the Nit palette and the metadata label style
 xiuxiu/DayOne.swift             dayone2:// hand-off
 design/appicon.svg              app icon source; render with rsvg-convert
-xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:)
+xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:),
+                                and conversion of any audio to 16 kHz mono
 xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording, one file per clip
 xiuxiu/ModelDownloader.swift    URLSession download with progress, atomic move into Documents
 xiuxiu/AppModel.swift           model state: downloading → loading → ready / failed,
