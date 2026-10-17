@@ -33,6 +33,15 @@ enum Inbox {
         }
     }
 
+    /// What a share actually offered, written only when nothing usable came out of it.
+    /// Without this, an app whose audio xiuxiu cannot read is indistinguishable from a tap
+    /// that did nothing, and there is no way to see which types were on the table.
+    static var diagnosticURL: URL? {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+            .appendingPathComponent("last-share.txt")
+    }
+
     static func destination(forExtension ext: String) -> URL? {
         directory?.appendingPathComponent("\(UUID().uuidString).\(ext.isEmpty ? "m4a" : ext)")
     }

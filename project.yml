@@ -67,8 +67,15 @@ targets:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
           NSExtensionAttributes:
-            # Only offer xiuxiu for audio, rather than appearing for every file on the phone.
-            NSExtensionActivationRule: 'SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $a, ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.audio").@count > 0).@count > 0'
+            # The permissive dictionary form rather than a predicate. Apple's rule keys cover
+            # image, movie, text, URL and file -- there is no audio category at all, so matching
+            # audio means writing a UTI predicate, and a predicate only fires if the host app
+            # advertises its types the way you guessed. Voice Memos does; Day One does not, and
+            # the extension simply never appeared there. This matches any file share and lets
+            # the code decide, which costs xiuxiu appearing for the occasional PDF.
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+              NSExtensionActivationSupportsAttachmentsWithMaxCount: 1
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cat.campoy.xiuxiu.share

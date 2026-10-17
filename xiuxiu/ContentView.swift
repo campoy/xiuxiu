@@ -71,6 +71,16 @@ struct ContentView: View {
         for url in Inbox.pending() {
             await transcribe(url, removingSource: true)
         }
+        reportFailedShare()
+    }
+
+    /// A share that offered nothing xiuxiu could read leaves a note behind rather than failing
+    /// silently, since from the share sheet the two are indistinguishable.
+    private func reportFailedShare() {
+        guard let url = Inbox.diagnosticURL,
+              let note = try? String(contentsOf: url, encoding: .utf8) else { return }
+        app.lastError = note
+        try? FileManager.default.removeItem(at: url)
     }
 
     private func transcribe(_ url: URL, removingSource: Bool) async {
