@@ -18,11 +18,11 @@ has no punctuation, and fixing that is the point of the app. Optimize for simpli
 | UI | SwiftUI, single target, no third-party deps besides whisper.cpp |
 | whisper.cpp | Prebuilt **v1.9.2** XCFramework, vendored at `Packages/WhisperFramework/whisper.xcframework` and wired up with a local SwiftPM `binaryTarget` path, so a clone builds offline. v1.9.3–v1.9.5 ship no XCFramework. |
 | Model | `ggml-large-v3-turbo-q5_0.bin` (~550 MB), downloaded from Hugging Face on first launch into Documents, excluded from backup, loaded **once** |
-| Acceleration | Metal on device (default), CPU in the simulator (its Metal driver cannot allocate the model buffer). Core ML off for v1. Revisit only if transcription is slow. |
-| Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor). Recording a new clip while earlier ones transcribe is allowed; the actor runs them one at a time. |
+| Acceleration | Metal on device (default), CPU in the simulator (its Metal driver cannot allocate the model buffer). Core ML off, and settled: a 3-minute recording transcribes in about 5.5 s on Metal, so the ~1.2 GB download and minutes-long first-load compile buy nothing. |
+| Transcription | Batch only (no streaming), greedy decoding, off the main thread (Swift actor). Recording a new clip while earlier ones transcribe is allowed; the actor runs them one at a time. Greedy is measured, not default-by-accident: on a real 3-minute recording, beam 5 produced 19 duplicate adjacent sentences against greedy's 2, including one repeated 18 times, at slightly worse speed. `no_context` is already whisper.cpp's default and changes nothing. |
 | Audio | `AVAudioRecorder` → 16 kHz mono 16-bit WAV, read back as Float via `AVAudioFile` |
 | Language | `language = "auto"` constant. Entries mix Spanish and English within one recording. |
-| Prompt | Punctuated Spanish/English `initialPrompt` to encourage punctuation and code-switching |
+| Prompt | Punctuated `initialPrompt` carrying Spanish, English, French and Catalan. It is not only a style sample: Whisper continues the prompt's **language** too, so a Spanish/English-only prompt rewrote French audio into broken Spanish even though detection had correctly returned `fr`. Add a punctuated sentence per language you journal in rather than reaching for `language`. |
 | Typical length | Under 5 minutes; foreground only (no background audio mode) |
 | Storage | SwiftData `Entry(date, text)`. Auto-save after transcription; edits auto-save. |
 | Audio retention | Delete the recording after a successful transcription, by its own URL. Each recording gets a unique filename, so finishing one clip cannot delete another. |
@@ -89,11 +89,11 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
 - [x] Speed on device. Closed without formal timings: it is fast enough in use, which is the only
       threshold that mattered. For reference, a 3-minute recording transcribes in about 5.5 s on
       an M-series Mac with Metal, so the simulator's ~100 s for a 4-second clip was entirely a
-      CPU-backend artifact. Core ML (step 5) is therefore not worth pursuing.
+      CPU-backend artifact. Core ML is therefore not worth pursuing; see the Acceleration row above.
 - [x] Catalan. Dropped. It was reported once, never reproduced -- detection returned `ca` and the
-      output was correct Catalan in every configuration tried -- and the multilingual prompt in
-      step 6 may well have fixed it anyway. Not worth chasing further without a recording that
-      actually fails.
+      output was correct Catalan in every configuration tried -- and the multilingual prompt (see
+      the Prompt row above) may well have fixed it in passing. Not worth chasing further without a
+      recording that actually fails.
 - [x] Memory. Not measured, and not pursued: nothing has been killed in normal use, which is the
       question the measurement was standing in for.
 - [x] Denied mic permission. Closed by reading the path rather than exercising it. `Recorder`
@@ -102,30 +102,7 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
       renders it, and `canRecord` depends only on the model, so the button stays tappable for a
       retry. Error shown, not stuck, recoverable.
 
-### 5. Iterate (only if step 4 shows a need)
-- Slow → Core ML encoder or fewer/more threads. The vendored XCFramework already has Core ML
-  compiled in and probes for `ggml-large-v3-turbo-encoder.mlmodelc` in Documents on every init,
-  falling back silently when it is absent, so turning it on means shipping that file, not changing code.
-- Language gets flattened to one → tune `initialPrompt`, or try forcing `"es"`/`"en"`.
-- Inaccurate → **not beam search**. Measured on a real 3-minute recording rather than assumed,
-  and it is worse, not "a bit more accurate and noticeably slower":
-
-  | config | words | identical adjacent sentences | worst single repeat |
-  |---|---|---|---|
-  | greedy | 256 | 2 | x2 |
-  | beam 5 | 485 | 19 | **x18** |
-
-  Beam search nearly doubles the output, but by looping rather than by catching more speech --
-  one sentence came back eighteen times. It is also only marginally slower (6.1 s against 5.5 s),
-  so there is no trade-off to weigh: it is worse output at worse speed. Greedy stays.
-
-  `no_context` was tested at the same time, on the theory that repetition comes from carrying
-  text between 30 s windows. It changed nothing -- byte-identical output -- because whisper.cpp
-  already defaults it on. Not the cause, and not a knob worth touching.
-- Need newer whisper.cpp → build an XCFramework with `./build-xcframework.sh` and replace the
-  vendored `Packages/WhisperFramework/whisper.xcframework` with it.
-
-### 6. Record while transcribing
+### 5. Record while transcribing
 
 Wanted after the simulator smoke test: tapping record again while an earlier clip is still
 being transcribed, instead of waiting for it to finish.
@@ -167,7 +144,7 @@ Two things worth knowing about the design:
   the screen for however long a transcription takes. If a result arrives while an earlier entry is
   being edited, the editor does swap to the new one -- the edit is already saved, but the cursor moves.
 
-### 7. Look and feel
+### 6. Look and feel
 
 - [x] Theme "Nit": cool ink ground, warm terracotta accent, cream text; light mode is warm
       paper rather than white, so the two appearances share a temperature instead of
@@ -193,7 +170,7 @@ iOS 26 wraps toolbar buttons in a glass pill, which reads as stray chrome on a f
 `buttonStyle` does not reach it -- the background belongs to the toolbar, not the button -- so
 it needs `sharedBackgroundVisibility(.hidden)` on the `ToolbarItem`, behind an availability check.
 
-### 8. Send to Day One
+### 7. Send to Day One
 
 The transcripts are going into Day One, so the app hands off directly rather than making you
 copy and paste.
@@ -211,7 +188,7 @@ copy and paste.
 
 Day One on this phone is `com.bloombuilt.dayone-ios` 2026.20.
 
-### 9. Share a recording in
+### 8. Share a recording in
 
 A recording made elsewhere -- a Voice Memo, a voice note -- should become an entry exactly
 like one recorded here, rather than needing to be re-spoken into the app.
@@ -248,7 +225,7 @@ The loop checks `framePosition < length` before reading instead of inferring EOF
 Failed transcriptions deliberately keep their audio, so `tmp` accumulates orphans when something
 goes wrong. iOS clears `tmp` on its own, so this is noted rather than fixed.
 
-### 10. Share extension
+### 9. Share extension
 
 - [x] A second target, `xiuxiuShare`, so xiuxiu appears in the share sheet for audio. Its
       activation rule is a UTI-CONFORMS-TO predicate on `public.audio`, so it offers itself for
