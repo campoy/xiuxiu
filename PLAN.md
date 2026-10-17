@@ -208,8 +208,9 @@ like one recorded here, rather than needing to be re-spoken into the app.
 - [x] Wait for the model if a share lands during first launch, rather than dropping the file.
 - [x] Verified end to end on the simulator with a deliberately wrong-format file (44.1 kHz
       stereo AAC): came back fully transcribed and punctuated, code-switching intact.
-- [ ] Share a real Voice Memo on the phone. The conversion is backend-independent, so this is
-      expected to hold, but Metal is a different path and it has not been exercised there.
+- [x] Share a real Voice Memo on the phone. Works. A real Day One recording (32 kHz mono AAC,
+      3 minutes) was also put through the conversion and transcribed correctly, which is what
+      ruled the audio path out when Day One's share sheet turned out to be the actual problem.
 
 Document types alone were not enough, and the first test did not catch it. `CFBundleDocumentTypes`
 only reaches Open With and document interaction; the app row in another app's share sheet comes
@@ -244,8 +245,13 @@ goes wrong. iOS clears `tmp` on its own, so this is noted rather than fixed.
       not something to rely on. A share that fails to wake the app simply waits in the inbox.
 - [x] Inbox files are deleted only once they are safely an entry, so a failure leaves the audio
       to retry rather than losing it.
-- [ ] Share a Voice Memo on the phone and confirm xiuxiu is offered, and that tapping it produces
-      an entry. The whole feature is unexercised against a real share sheet.
+- [x] Share a Voice Memo on the phone and confirm xiuxiu is offered. Works, and so does sharing
+      from Files. Day One does not offer xiuxiu, and that is not something this app can fix:
+      `excludedActivityTypes` only accepts Apple's own activity types, so no app can filter out
+      somebody else's share extension. Either Day One shares the entry rather than the audio
+      attachment, or it draws its own share UI. Day One → Save to Files → share works today.
+- [ ] Settle Day One by sharing from the audio attachment itself rather than the entry, and
+      checking whether the share diagnostic shows up in the app afterwards.
 
 ## File map
 
