@@ -211,6 +211,12 @@ like one recorded here, rather than needing to be re-spoken into the app.
 - [ ] Share a real Voice Memo on the phone. The conversion is backend-independent, so this is
       expected to hold, but Metal is a different path and it has not been exercised there.
 
+Document types alone were not enough, and the first test did not catch it. `CFBundleDocumentTypes`
+only reaches Open With and document interaction; the app row in another app's share sheet comes
+from a share extension, and there wasn't one. The simulator test drove `onOpenURL` directly with
+`simctl openurl`, which proved conversion and import but skipped discovery entirely -- the half
+that was broken.
+
 Worth knowing, because it would have broken the feature completely and silently: `AVAudioFile.read`
 throws `eofErr` (OSStatus -39) at end of file rather than returning zero frames. Treating that as
 a failure meant every conversion died on its last chunk, with an opaque number as the only clue.
@@ -218,6 +224,28 @@ The loop checks `framePosition < length` before reading instead of inferring EOF
 
 Failed transcriptions deliberately keep their audio, so `tmp` accumulates orphans when something
 goes wrong. iOS clears `tmp` on its own, so this is noted rather than fixed.
+
+### 10. Share extension
+
+- [x] A second target, `xiuxiuShare`, so xiuxiu appears in the share sheet for audio. Its
+      activation rule is a UTI-CONFORMS-TO predicate on `public.audio`, so it offers itself for
+      recordings rather than for every file on the phone.
+- [x] The extension is a courier and nothing more: it copies the attachment into an App Group
+      container and wakes the app. It cannot transcribe -- an extension gets a fraction of an
+      app's memory and the model wants about a gigabyte -- and it shows no UI, since there is
+      nothing to choose.
+- [x] App Group `group.cat.campoy.xiuxiu`, shared by both targets. This was expected to be the
+      blocker, since free Personal Teams do not get most capabilities. It is not: the team
+      provisioning profile carries `com.apple.security.application-groups` and Xcode registers
+      it automatically under `-allowProvisioningUpdates`. Checked rather than assumed.
+- [x] The app drains the inbox on launch, on every activation, and on the `xiuxiu://import` URL.
+      Three triggers because waking the app from an extension is best effort: `NSExtensionContext.open`
+      has historically refused to work from share extensions, and the responder-chain fallback is
+      not something to rely on. A share that fails to wake the app simply waits in the inbox.
+- [x] Inbox files are deleted only once they are safely an entry, so a failure leaves the audio
+      to retry rather than losing it.
+- [ ] Share a Voice Memo on the phone and confirm xiuxiu is offered, and that tapping it produces
+      an entry. The whole feature is unexercised against a real share sheet.
 
 ## File map
 
@@ -228,6 +256,8 @@ Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarge
 xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Theme.swift              the Nit palette and the metadata label style
 xiuxiu/DayOne.swift             dayone2:// hand-off
+Shared/Inbox.swift              App Group inbox, compiled into both targets
+xiuxiuShare/                    share extension: copies audio in, wakes the app
 design/appicon.svg              app icon source; render with rsvg-convert
 xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:),
                                 and conversion of any audio to 16 kHz mono

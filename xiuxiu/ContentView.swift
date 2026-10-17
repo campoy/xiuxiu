@@ -4,6 +4,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var app = AppModel()
     @State private var entry: Entry?
 
@@ -43,17 +44,42 @@ struct ContentView: View {
             }
         }
         .tint(Nit.accent(scheme))
-        .task { await app.prepare() }
-        // A recording shared in from another app becomes an entry like any other.
+        .task {
+            await app.prepare()
+            await drainInbox()
+        }
+        // Also drain on every activation, not only on the wake URL. The share extension's
+        // attempt to open the app is best effort, so this is what makes a share that arrived
+        // while the app was closed -- or that failed to wake it -- still turn into an entry.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await drainInbox() } }
+        }
         .onOpenURL { url in
             Task {
-                if let text = await app.transcribeShared(url) {
-                    let new = Entry(text: text)
-                    modelContext.insert(new)
-                    entry = new
+                if url.scheme == "xiuxiu" {
+                    await drainInbox()
+                } else {
+                    // Open With, handing the file over directly rather than through the inbox.
+                    await transcribe(url, removingSource: false)
                 }
             }
         }
+    }
+
+    /// Audio left by the share extension, oldest first.
+    private func drainInbox() async {
+        for url in Inbox.pending() {
+            await transcribe(url, removingSource: true)
+        }
+    }
+
+    private func transcribe(_ url: URL, removingSource: Bool) async {
+        guard let text = await app.transcribeShared(url) else { return }
+        let new = Entry(text: text)
+        modelContext.insert(new)
+        entry = new
+        // Only once it is safely an entry, so a failure leaves the audio to retry.
+        if removingSource { try? FileManager.default.removeItem(at: url) }
     }
 
     private var historyLink: some View {
