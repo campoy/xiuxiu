@@ -20,6 +20,8 @@ targets:
       path: xiuxiu/Info.plist
       properties:
         CFBundleDisplayName: xiuxiu
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSMicrophoneUsageDescription: xiuxiu records your voice so it can transcribe it on-device.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
@@ -51,8 +53,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.2"
+        CURRENT_PROJECT_VERSION: "2"
 
   # Courier only: copies shared audio into the App Group inbox and wakes the app.
   xiuxiuShare:
@@ -84,5 +86,5 @@ targets:
         CODE_SIGN_ENTITLEMENTS: xiuxiuShare/xiuxiuShare.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.2"
+        CURRENT_PROJECT_VERSION: "2"

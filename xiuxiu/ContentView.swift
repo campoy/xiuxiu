@@ -290,6 +290,13 @@ struct EntryEditor: View {
 }
 
 struct HistoryView: View {
+    static let build: String = {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "xiuxiu \(version) (\(build))"
+    }()
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var scheme
     @Query(sort: \Entry.date, order: .reverse) private var entries: [Entry]
@@ -326,6 +333,16 @@ struct HistoryView: View {
         .scrollContentBackground(.hidden)
         .background(Nit.ground(scheme).ignoresSafeArea())
         .navigationTitle("History")
+        .safeAreaInset(edge: .bottom) {
+            // Which build is actually on the phone. Sounds trivial; without it there is no way
+            // to tell one install from the next, and "did that deploy?" becomes unanswerable.
+            Text(Self.build)
+                .metaLabel()
+                .foregroundStyle(Nit.dim(scheme))
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
+                .background(Nit.ground(scheme))
+        }
         .overlay {
             if entries.isEmpty {
                 Text("No entries yet")
