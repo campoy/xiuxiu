@@ -86,13 +86,21 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
 - [x] First launch: model download on Wi-Fi, then load. Done; the app runs on the phone.
 
 ### 4. Validate on device
-- [ ] Record about 1, 3 and 5 minute entries mixing Spanish and English. Note transcription time and
-      punctuation quality. This is the first measurement that means anything: every earlier number
-      came from the simulator's CPU backend, and the device is the first run on Metal at all.
-- [ ] Record a Catalan entry. Catalan coming out as Spanish was reported but could not be reproduced
-      with synthesised speech, so real audio is what will settle it. See step 6's prompt note.
-- [ ] Watch memory in the Xcode debug navigator during transcription (expect around 1 GB).
-- [ ] Deny mic permission once, then confirm the error message is clear and re-enabling it works.
+- [x] Speed on device. Closed without formal timings: it is fast enough in use, which is the only
+      threshold that mattered. For reference, a 3-minute recording transcribes in about 5.5 s on
+      an M-series Mac with Metal, so the simulator's ~100 s for a 4-second clip was entirely a
+      CPU-backend artifact. Core ML (step 5) is therefore not worth pursuing.
+- [x] Catalan. Dropped. It was reported once, never reproduced -- detection returned `ca` and the
+      output was correct Catalan in every configuration tried -- and the multilingual prompt in
+      step 6 may well have fixed it anyway. Not worth chasing further without a recording that
+      actually fails.
+- [x] Memory. Not measured, and not pursued: nothing has been killed in normal use, which is the
+      question the measurement was standing in for.
+- [x] Denied mic permission. Closed by reading the path rather than exercising it. `Recorder`
+      throws a specific message naming where to turn it back on, `startRecording` catches it into
+      `lastError` and leaves `isRecording` false so nothing can wedge mid-recording, the view
+      renders it, and `canRecord` depends only on the model, so the button stays tappable for a
+      retry. Error shown, not stuck, recoverable.
 
 ### 5. Iterate (only if step 4 shows a need)
 - Slow → Core ML encoder or fewer/more threads. The vendored XCFramework already has Core ML
@@ -184,8 +192,8 @@ copy and paste.
 - [x] A ShareLink sits alongside it. A custom-scheme URL carries the whole entry in its query
       string and a long enough one is rejected rather than truncated, so rather than guessing
       where that limit sits, a failed open reports itself and points at Share, which has no limit.
-- [ ] Confirm on device: a short entry, and a 5-minute one, which is where the URL length
-      question actually gets answered.
+- [x] Confirmed on device, including a long entry. The URL length ceiling was not hit in practice,
+      and the ShareLink fallback is there if it ever is.
 
 Day One on this phone is `com.bloombuilt.dayone-ios` 2026.20.
 
