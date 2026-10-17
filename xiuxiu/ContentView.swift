@@ -178,6 +178,7 @@ struct ContentView: View {
 struct EntryEditor: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var entry: Entry
+    @State private var sendError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -196,14 +197,47 @@ struct EntryEditor: View {
                     RoundedRectangle(cornerRadius: 12).stroke(Nit.line(scheme), lineWidth: 1)
                 )
 
-            Button {
-                UIPasteboard.general.string = entry.text
-            } label: {
-                Text("Copy").metaLabel()
-                    .foregroundStyle(Nit.dim(scheme))
+            if let sendError {
+                Text(sendError).font(.caption).foregroundStyle(Nit.live(scheme))
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .overlay(Capsule().stroke(Nit.line(scheme), lineWidth: 1))
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    UIPasteboard.general.string = entry.text
+                } label: {
+                    Text("Copy").metaLabel()
+                        .foregroundStyle(Nit.dim(scheme))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(Capsule().stroke(Nit.line(scheme), lineWidth: 1))
+                }
+
+                if DayOne.isInstalled {
+                    Button {
+                        Task {
+                            sendError = await DayOne.post(entry.text)
+                                ? nil
+                                : "Couldn't open Day One — the entry may be too long for a link. Use Share instead."
+                        }
+                    } label: {
+                        Text("Day One").metaLabel()
+                            .foregroundStyle(Nit.ground(scheme))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Capsule().fill(Nit.accent(scheme)))
+                    }
+                }
+
+                // The general escape hatch, and the one with no length limit.
+                ShareLink(item: entry.text) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Nit.dim(scheme))
+                        .frame(width: 46, height: 44)
+                        .overlay(Capsule().stroke(Nit.line(scheme), lineWidth: 1))
+                }
             }
         }
     }

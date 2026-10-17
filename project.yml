@@ -21,6 +21,9 @@ targets:
         NSMicrophoneUsageDescription: xiuxiu records your voice so it can transcribe it on-device.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Without this, canOpenURL("dayone2://") always answers false and the
+        # Day One button would never appear even with Day One installed.
+        LSApplicationQueriesSchemes: [dayone2]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cat.campoy.xiuxiu

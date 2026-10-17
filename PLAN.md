@@ -171,6 +171,24 @@ iOS 26 wraps toolbar buttons in a glass pill, which reads as stray chrome on a f
 `buttonStyle` does not reach it -- the background belongs to the toolbar, not the button -- so
 it needs `sharedBackgroundVisibility(.hidden)` on the `ToolbarItem`, behind an availability check.
 
+### 8. Send to Day One
+
+The transcripts are going into Day One, so the app hands off directly rather than making you
+copy and paste.
+
+- [x] `dayone2://post?entry=...` opens a new Day One entry with the text already in it: one tap
+      rather than the share sheet's two. `DayOne.swift`.
+- [x] `LSApplicationQueriesSchemes: [dayone2]` in `project.yml`. Without it `canOpenURL` always
+      answers false and the button would never appear, even with Day One installed.
+- [x] The button only appears when Day One is actually installed.
+- [x] A ShareLink sits alongside it. A custom-scheme URL carries the whole entry in its query
+      string and a long enough one is rejected rather than truncated, so rather than guessing
+      where that limit sits, a failed open reports itself and points at Share, which has no limit.
+- [ ] Confirm on device: a short entry, and a 5-minute one, which is where the URL length
+      question actually gets answered.
+
+Day One on this phone is `com.bloombuilt.dayone-ios` 2026.20.
+
 ## File map
 
 ```
@@ -179,6 +197,7 @@ project.yml                     XcodeGen spec
 Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
 xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Theme.swift              the Nit palette and the metadata label style
+xiuxiu/DayOne.swift             dayone2:// hand-off
 design/appicon.svg              app icon source; render with rsvg-convert
 xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:)
 xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording, one file per clip
