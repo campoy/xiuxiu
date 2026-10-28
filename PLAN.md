@@ -84,6 +84,19 @@ so it survives a `darwin-rebuild switch` with `onActivation.cleanup = "zap"` set
       first install, which mounted the disk image on its own. The first launch is still refused with
       "Untrusted Developer" until the profile is trusted on the phone; that is expected, not a fault.
 - [x] First launch: model download on Wi-Fi, then load. Done; the app runs on the phone.
+- [ ] Keep it signed. The free team's profile lasts 7 days, and the app did stop launching once
+      it ran out. `scripts/reinstall.sh` rebuilds with `-allowProvisioningUpdates` (fresh profile)
+      and installs over Wi-Fi with devicectl; `--schedule` makes it a nightly launchd agent. See
+      README. Written in a cloud session with no Mac, so **nothing in it has run yet**. Things to
+      confirm on the first real runs:
+      - that `devicectl list devices` reports the unplugged phone as `available` (the script's
+        reachability check greps for that) and as `unavailable` when it is off the network;
+      - whether the install succeeds with the phone **locked**. If it needs unlocking, a 03:00
+        run never works and the schedule has to move to a time the phone is in use;
+      - that signing works from launchd with the screen locked, i.e. the login keychain stays
+        unlocked and `-allowProvisioningUpdates` finds the Xcode account without a dialog.
+      If this proves unreliable, the paid Developer Program (1-year profiles, TestFlight) is the
+      fallback; it needs only a new `DEVELOPMENT_TEAM`.
 
 ### 4. Validate on device
 - [x] Speed on device. Closed without formal timings: it is fast enough in use, which is the only
@@ -287,6 +300,8 @@ xiuxiu/Lock.swift               Face ID (or passcode) in front of History
 Shared/Inbox.swift              App Group inbox, compiled into both targets
 xiuxiuShare/                    share extension: copies audio in, wakes the app
 design/appicon.svg              app icon source; render with rsvg-convert
+scripts/reinstall.sh            rebuild + install over Wi-Fi to renew the 7-day profile;
+                                --schedule makes it a nightly launchd agent
 xiuxiu/Whisper.swift            actor owning whisper_context; transcribe(fileAt:onProgress:),
                                 and conversion of any audio to 16 kHz mono
 xiuxiu/Recorder.swift           mic permission + 16 kHz mono WAV recording, one file per clip

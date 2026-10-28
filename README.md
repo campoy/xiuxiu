@@ -17,6 +17,7 @@ xiuxiu/Recorder.swift              16 kHz mono PCM WAV recording
 xiuxiu/ModelDownloader.swift       first-launch model download with progress
 xiuxiu/AppModel.swift              state machine: downloading → loading → ready ⇄ recording → transcribing
 xiuxiu/ContentView.swift           UI: record button, editor, copy, history
+scripts/reinstall.sh               rebuild + install over Wi-Fi, to renew the 7-day profile
 ```
 
 ## Getting it on your iPhone (free Apple account)
@@ -49,7 +50,27 @@ the model only needs to load, which takes a few seconds each time the app starts
 Limits of a free account:
 - **The app stops launching after 7 days.** Plug in and press ⌘R again to re-sign it.
   Your entries and the downloaded model survive, because reinstalling over the app keeps its data.
+  To stop doing that by hand, see below.
 - At most 3 sideloaded apps per device. Deleting the app deletes entries and the model.
+
+## Re-signing automatically
+
+`scripts/reinstall.sh` rebuilds and installs over the app on the phone, which renews the 7-day
+profile. Scheduled nightly, it keeps the app alive without a cable:
+
+1. Plug the phone in once. In Xcode's device window, turn on **Connect via network** for it.
+   Unplug, and check that `xcrun devicectl list devices` still shows it as `available`.
+2. `scripts/reinstall.sh "<device name>"` once by hand, to see it work.
+3. `scripts/reinstall.sh --schedule "<device name>"` installs a launchd agent that runs it every
+   night at 03:00. The log is `~/Library/Logs/xiuxiu-reinstall.log`.
+
+The phone has to be on the same Wi-Fi as the Mac (not a guest network) and awake enough to
+answer, which is why the run is at night, when it is usually charging. If it is unreachable the
+run just logs that and tries again the next night, so missing a few nights costs nothing.
+A Mac asleep at 03:00 runs the job when it wakes; `sudo pmset repeat wake MTWRFSU 02:55:00`
+wakes it for the slot instead. To remove it:
+`launchctl bootout gui/$(id -u)/cat.campoy.xiuxiu.reinstall` and delete the plist from
+`~/Library/LaunchAgents`.
 
 ## Knobs (`xiuxiu/Config.swift`)
 
