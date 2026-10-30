@@ -47,7 +47,8 @@ Stay on Wi-Fi and keep the app open; the screen stays awake while it downloads. 
 the model only needs to load, which takes a few seconds each time the app starts.
 
 Limits of a free account:
-- **The app stops launching after 7 days.** Plug in and press ⌘R again to re-sign it.
+- **The app stops launching after 7 days.** Run `./install.sh` (or press ⌘R) to re-sign it. It
+  installs over Wi-Fi once the phone has been paired by cable, and the Mac mini runs it nightly.
   Your entries and the downloaded model survive, because reinstalling over the app keeps its data.
 - At most 3 sideloaded apps per device. Deleting the app deletes entries and the model.
 
