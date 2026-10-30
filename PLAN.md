@@ -274,12 +274,33 @@ History now asks first.
 Not gated: the entry on the main screen after recording. That is the thing you are looking at
 when you record it, and locking it would mean authenticating to read your own sentence back.
 
+### 11. Stay installed past 7 days
+
+The free Personal Team's profile lasts 7 days, after which the app stops launching. Rather
+than plugging in weekly, the Mac mini re-signs and reinstalls it every night over Wi-Fi.
+
+- [x] `install.sh`: `xcodegen`, a device build with `-allowProvisioningUpdates` (which is what
+      fetches a fresh profile), then `devicectl device install app` on the first paired
+      physical iOS device. The Apple Watch is paired too, hence the platform filter. Verified
+      from the laptop: installed over the local network, no cable, in about 20 s, data kept.
+- [x] Scheduled from the dotfiles repo: `xiuxiu-install.sh` under
+      `launchd.agents.xiuxiu-install`, daily at 4am, pulling `main` first, so only pushed
+      commits reach the phone. Daily rather than weekly so one night away from home Wi-Fi
+      costs a retry, not the app. Log in `~/Library/Logs/xiuxiu-install.log` on the mini.
+- [ ] One-time on the mini, all needing the human: `sudo xcodebuild -runFirstLaunch`
+      (devicectl fails with "Authorization is required" until then); open the project in
+      Xcode once and pick the Personal Team so a signing certificate exists there; plug the
+      phone into the mini once and tap Trust.
+- [ ] Confirm a scheduled run lands. FileVault blocks auto-login, so after a reboot nothing
+      runs until someone logs in: the agent and the keychain both need the session.
+
 ## File map
 
 ```
 AGENTS.md                       conventions for coding agents working in this repo
 project.yml                     XcodeGen spec
 Packages/WhisperFramework/      vendored whisper.xcframework and its binaryTarget wrapper
+install.sh                      device build + install on the paired iPhone, cable or Wi-Fi
 xiuxiu/Config.swift             language, initialPrompt, model URL
 xiuxiu/Theme.swift              the Nit palette and the metadata label style
 xiuxiu/DayOne.swift             dayone2:// hand-off
